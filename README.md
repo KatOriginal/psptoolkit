@@ -1,10 +1,5 @@
 # 🎮 PSP Toolkit
 
-![Python](https://img.shields.io/badge/Python-3.10%2B-blue?logo=python)
-![GUI](https://img.shields.io/badge/GUI-PySide6%20(Qt6)-41CD52?logo=qt)
-![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS-informational)
-![Tests](https://img.shields.io/badge/Tests-17%20Passed-brightgreen)
-
 **PSP Toolkit** — современная универсальная desktop-программа на Python для работы с собственными образами дисков, ресурсами и данными PlayStation Portable, а также подготовки игр PlayStation 1 для запуска на PSP.
 
 Программа объединяет в одном окне функционал, для которого раньше требовалось несколько отдельных старых утилит (UMDGen, PSX2PSP, ciso, SFO Editor).
