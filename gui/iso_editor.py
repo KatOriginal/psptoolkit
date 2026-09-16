@@ -1,4 +1,4 @@
-"""Визуальный интерфейс для просмотра, извлечения и замены файлов в ISO."""
+"""Визуальный интерфейс UMD Editor для просмотра, извлечения и замены ресурсов в ISO."""
 
 from __future__ import annotations
 
@@ -32,8 +32,6 @@ from gui.widgets.xmb_preview import XMBPreviewWidget
 
 
 class BatchExtractionWorker(QThread):
-    """Фоновый поток для потокового извлечения файлов или целых директорий."""
-
     progress = Signal(int, int, str)
     finished_success = Signal(str)
     error = Signal(str)
@@ -64,8 +62,6 @@ class BatchExtractionWorker(QThread):
 
 
 class ISORebuildWorker(QThread):
-    """Фоновый поток для пересборки модифицированного ISO."""
-
     progress = Signal(int, int, str)
     finished_success = Signal(str)
     error = Signal(str)
@@ -88,13 +84,13 @@ class ISORebuildWorker(QThread):
                 cancel_check=lambda: self._cancelled,
             )
             if not self._cancelled:
-                self.finished_success.emit(f"Изменённый ISO успешно сохранён:\n{self.dest_iso_path}")
+                self.finished_success.emit(f"Изменённый образ успешно сохранён:\n{self.dest_iso_path}")
         except Exception as exc:
             self.error.emit(str(exc))
 
 
 class ISOEditorWidget(QWidget):
-    """Виджет браузера, извлечения и модификации файлов ISO."""
+    """Виджет UMD Editor: браузер, извлечение и замена графики/файлов диска."""
 
     def __init__(self, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
@@ -108,7 +104,6 @@ class ISOEditorWidget(QWidget):
     def _setup_ui(self) -> None:
         main_layout = QVBoxLayout(self)
 
-        # Верхняя панель инструментов
         toolbar = QHBoxLayout()
         self.btn_open = QPushButton("Открыть ISO")
         self.btn_open.clicked.connect(self.open_file_dialog)
@@ -134,9 +129,9 @@ class ISOEditorWidget(QWidget):
         toolbar.addStretch()
         main_layout.addLayout(toolbar)
 
-        # Сплиттер: слева Дерево, справа XMB
         splitter = QSplitter(Qt.Orientation.Horizontal)
 
+        # Левая колонка: дерево файлов
         tree_container = QWidget()
         tree_layout = QVBoxLayout(tree_container)
         tree_layout.setContentsMargins(0, 0, 0, 0)
@@ -154,6 +149,7 @@ class ISOEditorWidget(QWidget):
         tree_layout.addWidget(self.tree)
         splitter.addWidget(tree_container)
 
+        # Правая колонка: XMB Preview и технические параметры
         right_container = QWidget()
         right_layout = QVBoxLayout(right_container)
         right_layout.setContentsMargins(0, 0, 0, 0)
@@ -161,6 +157,8 @@ class ISOEditorWidget(QWidget):
         self.preview_box = QGroupBox("Предпросмотр PSP (XMB)")
         preview_layout = QVBoxLayout(self.preview_box)
         self.xmb_widget = XMBPreviewWidget()
+        self.xmb_widget.replace_icon_requested.connect(self._replace_xmb_icon)
+        self.xmb_widget.replace_pic_requested.connect(self._replace_xmb_pic)
         preview_layout.addWidget(self.xmb_widget)
         right_layout.addWidget(self.preview_box)
 
@@ -257,7 +255,25 @@ class ISOEditorWidget(QWidget):
         if isinstance(pic1_entry, ISOFile):
             pic1_bytes = self.reader.read_file_bytes(pic1_entry)
 
-        self.xmb_widget.update_data(icon0_bytes, pic1_bytes, title, game_id)
+        self.xmb_widget.update_data(icon0_bytes, pic1_bytes, title, game_id, can_replace=True)
+
+    def _replace_xmb_icon(self) -> None:
+        if not self.reader:
+            return
+        icon_entry = self.reader.find_entry("PSP_GAME/ICON0.PNG")
+        if not isinstance(icon_entry, ISOFile):
+            QMessageBox.warning(self, "Внимание", "В образе нет файла PSP_GAME/ICON0.PNG")
+            return
+        self._replace_file_dialog(icon_entry)
+
+    def _replace_xmb_pic(self) -> None:
+        if not self.reader:
+            return
+        pic_entry = self.reader.find_entry("PSP_GAME/PIC1.PNG")
+        if not isinstance(pic_entry, ISOFile):
+            QMessageBox.warning(self, "Внимание", "В образе нет файла PSP_GAME/PIC1.PNG")
+            return
+        self._replace_file_dialog(pic_entry)
 
     def _populate_tree(self) -> None:
         self.tree.clear()
@@ -273,7 +289,7 @@ class ISOEditorWidget(QWidget):
             node.setData(0, Qt.ItemDataRole.UserRole, item)
 
             if isinstance(item, ISOFile) and item.is_modified:
-                node.setForeground(4, QColor("#e65100"))
+                node.setForeground(4, QColor("#ff9800"))
                 font = node.font(0)
                 font.setBold(True)
                 node.setFont(0, font)
@@ -328,11 +344,13 @@ class ISOEditorWidget(QWidget):
         menu.exec(self.tree.viewport().mapToGlobal(position))
 
     def _replace_file_dialog(self, iso_file: ISOFile) -> None:
+        filter_str = "PNG Images (*.png);;All Files (*.*)" if iso_file.name.lower().endswith(".png") else "All Files (*.*)"
         path, _ = QFileDialog.getOpenFileName(
-            self, f"Выберите новый файл для замены '{iso_file.name}'", "", "All Files (*.*)"
+            self, f"Выберите новый файл для замены '{iso_file.name}'", "", filter_str
         )
         if path:
             iso_file.replacement_path = Path(path)
+            iso_file.replacement_bytes = None
             self.has_modifications = True
             self.btn_save_iso.setEnabled(True)
 
@@ -350,6 +368,7 @@ class ISOEditorWidget(QWidget):
 
     def _revert_replacement(self, iso_file: ISOFile) -> None:
         iso_file.replacement_path = None
+        iso_file.replacement_bytes = None
         self._populate_tree()
         self._load_game_presentation()
 

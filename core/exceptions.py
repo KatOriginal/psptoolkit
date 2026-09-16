@@ -1,4 +1,4 @@
-"""Иерархия исключений для PSP Toolkit."""
+"""Иерархия исключений для UMD Studio."""
 
 
 class PSPToolkitError(Exception):
@@ -27,3 +27,7 @@ class PBPFormatError(BinaryFormatError):
 
 class CUEFormatError(BinaryFormatError):
     """Ошибка разбора разметки CUE Sheet."""
+
+
+class PatchFormatError(BinaryFormatError):
+    """Ошибка применения патча PPF или пакета модификаций."""

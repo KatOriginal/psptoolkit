@@ -68,7 +68,6 @@ class AddEntryDialog(QDialog):
 
         if data_type == SFODataType.INT32:
             try:
-                # Поддержка десятичных и 16-ричных чисел (0x...)
                 val = int(value_str, 0)
                 if not (0 <= val <= 0xFFFFFFFF):
                     raise ValueError
@@ -102,7 +101,6 @@ class SFOEditorWidget(QWidget):
     def _setup_ui(self) -> None:
         layout = QVBoxLayout(self)
 
-        # Панель действий
         toolbar = QHBoxLayout()
         self.btn_open = QPushButton("Открыть SFO")
         self.btn_open.clicked.connect(self.open_file_dialog)
@@ -133,12 +131,11 @@ class SFOEditorWidget(QWidget):
         toolbar.addStretch()
 
         self.lbl_path = QLabel("Файл не загружен (перетащите .SFO сюда)")
-        self.lbl_path.setStyleSheet("color: gray;")
+        self.lbl_path.setStyleSheet("color: #9295a8;")
         toolbar.addWidget(self.lbl_path)
 
         layout.addLayout(toolbar)
 
-        # Таблица параметров
         self.table = QTableWidget(0, 3)
         self.table.setHorizontalHeaderLabels(["Ключ (Key)", "Тип данных", "Значение (Value)"])
         self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
@@ -167,12 +164,11 @@ class SFOEditorWidget(QWidget):
             self.load_sfo_file(Path(path))
 
     def load_sfo_file(self, path: Path) -> None:
-        """Загрузка и парсинг SFO-файла."""
         try:
             self.current_sfo = SFO.from_file(str(path))
             self.current_path = path
-            self.lbl_path.setText(f"Файл: {path.name} ({path})")
-            self.lbl_path.setStyleSheet("color: #2e7d32; font-weight: bold;")
+            self.lbl_path.setText(f"Файл: {path.name}")
+            self.lbl_path.setStyleSheet("color: #4caf50; font-weight: bold;")
 
             self._populate_table()
 
@@ -195,18 +191,15 @@ class SFOEditorWidget(QWidget):
         for row, (key, entry) in enumerate(self.current_sfo.entries.items()):
             self.table.insertRow(row)
 
-            # Ключ (только для чтения)
             item_key = QTableWidgetItem(key)
             item_key.setFlags(item_key.flags() & ~Qt.ItemFlag.ItemIsEditable)
             self.table.setItem(row, 0, item_key)
 
-            # Тип
             type_str = "Число (uint32)" if entry.data_type == SFODataType.INT32 else "Строка UTF-8"
             item_type = QTableWidgetItem(type_str)
             item_type.setFlags(item_type.flags() & ~Qt.ItemFlag.ItemIsEditable)
             self.table.setItem(row, 1, item_type)
 
-            # Значение (редактируемое)
             val_str = (
                 f"0x{entry.value:08X} ({entry.value})"
                 if entry.data_type == SFODataType.INT32
@@ -218,7 +211,6 @@ class SFOEditorWidget(QWidget):
         self.table.blockSignals(False)
 
     def _on_cell_changed(self, row: int, column: int) -> None:
-        """Обработка редактирования значения в таблице."""
         if column != 2 or not self.current_sfo:
             return
 
@@ -230,7 +222,6 @@ class SFOEditorWidget(QWidget):
 
         if entry.data_type == SFODataType.INT32:
             try:
-                # Отсекаем отображение вида 0x00000000 (0)
                 if "(" in new_val_str and new_val_str.endswith(")"):
                     raw_num = new_val_str.split("(")[-1][:-1]
                     val = int(raw_num, 0)
@@ -245,7 +236,6 @@ class SFOEditorWidget(QWidget):
             self.current_sfo.set_string(key, new_val_str)
 
     def add_entry(self) -> None:
-        """Добавление нового ключа через диалоговое окно."""
         if not self.current_sfo:
             return
 
@@ -261,7 +251,6 @@ class SFOEditorWidget(QWidget):
             self._populate_table()
 
     def delete_entry(self) -> None:
-        """Удаление выбранного ключа."""
         if not self.current_sfo:
             return
 
@@ -300,7 +289,22 @@ class SFOEditorWidget(QWidget):
             try:
                 self.current_sfo.write_to_file(path)
                 self.current_path = Path(path)
-                self.lbl_path.setText(f"Файл: {self.current_path.name} ({self.current_path})")
+                self.lbl_path.setText(f"Файл: {self.current_path.name}")
                 QMessageBox.information(self, "Успех", f"Файл сохранён:\n{self.current_path}")
             except Exception as exc:
                 QMessageBox.critical(self, "Ошибка сохранения", str(exc))
+
+
+class SFODialog(QDialog):
+    """Отдельное диалоговое окно для редактирования PARAM.SFO."""
+
+    def __init__(self, parent: Optional[QWidget] = None) -> None:
+        super().__init__(parent)
+        self.setWindowTitle("Редактор PARAM.SFO — UMD Studio")
+        self.resize(750, 480)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(8, 8, 8, 8)
+
+        self.editor = SFOEditorWidget(self)
+        layout.addWidget(self.editor)

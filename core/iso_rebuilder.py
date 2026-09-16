@@ -16,12 +16,10 @@ from formats.iso import (
 
 
 def _pack_both_endian_32(val: int) -> bytes:
-    """Упаковка 32-битного числа в формате Both-Endian (LE + BE)."""
     return struct.pack("<I", val) + struct.pack(">I", val)
 
 
 def _pack_both_endian_16(val: int) -> bytes:
-    """Упаковка 16-битного числа в формате Both-Endian (LE + BE)."""
     return struct.pack("<H", val) + struct.pack(">H", val)
 
 
@@ -32,7 +30,6 @@ def _build_directory_record(
     is_dir: bool,
     date_bytes: bytes = b"\x7C\x01\x01\x00\x00\x00\x00",
 ) -> bytes:
-    """Формирование одной бинарной записи Directory Record."""
     if name == ".":
         name_bytes = b"\x00"
     elif name == "..":
@@ -50,27 +47,25 @@ def _build_directory_record(
 
     buf = bytearray(rec_len)
     buf[0] = rec_len
-    buf[1] = 0  # Extended attribute length
+    buf[1] = 0
     buf[2:10] = _pack_both_endian_32(lba)
     buf[10:18] = _pack_both_endian_32(size)
     buf[18:25] = date_bytes
-    buf[25] = 2 if is_dir else 0  # Flags
-    buf[26] = 0  # Unit size
-    buf[27] = 0  # Interleave gap
-    buf[28:32] = _pack_both_endian_16(1)  # Volume sequence number
+    buf[25] = 2 if is_dir else 0
+    buf[26] = 0
+    buf[27] = 0
+    buf[28:32] = _pack_both_endian_16(1)
     buf[32] = name_len
     buf[33 : 33 + name_len] = name_bytes
     return bytes(buf)
 
 
 def _pack_records_to_sectors(records: list[bytes]) -> bytes:
-    """Упаковка записей каталога по секторам 2048 байт без пересечения границ."""
     out = bytearray()
     current_sector = bytearray()
 
     for rec in records:
         if len(current_sector) + len(rec) > SECTOR_SIZE:
-            # Заполняем остаток сектора нулями
             current_sector.extend(b"\x00" * (SECTOR_SIZE - len(current_sector)))
             out.extend(current_sector)
             current_sector = bytearray()
@@ -94,7 +89,6 @@ class ISORebuilder:
         cancel_check: Optional[Callable[[], bool]] = None,
         chunk_size: int = 1024 * 1024,
     ) -> None:
-        """Пересборка ISO с заменой файлов и пересчётом LBA."""
         out_path = Path(output_iso_path)
         temp_path = out_path.with_suffix(".tmp_iso")
 
@@ -103,7 +97,6 @@ class ISORebuilder:
 
         out_path.parent.mkdir(parents=True, exist_ok=True)
 
-        # Собираем список всех каталогов и файлов
         all_dirs: list[tuple[ISODirectory, Optional[ISODirectory]]] = []
         all_files: list[ISOFile] = []
 
@@ -117,17 +110,11 @@ class ISORebuilder:
 
         collect(reader.root, None)
 
-        # -------------------------------------------------------------
-        # ПРОХОД 1: Определение размеров каталогов и назначение LBA
-        # -------------------------------------------------------------
-        # Размер записи каталога зависит ТОЛЬКО от имени файла, но не от его размера!
-        # Поэтому мы можем заранее узнать точные размеры каталогов в секторах.
         dir_sector_counts: dict[str, int] = {}
         dir_lba_map: dict[str, int] = {}
         file_lba_map: dict[str, int] = {}
 
         for dir_node, parent_node in all_dirs:
-            # Для каждого каталога генерируем фиктивные записи, чтобы узнать длину
             dummy_records = [
                 _build_directory_record(".", 0, 0, True),
                 _build_directory_record("..", 0, 0, True),
@@ -139,11 +126,6 @@ class ISORebuilder:
             packed = _pack_records_to_sectors(dummy_records)
             dir_sector_counts[dir_node.path] = len(packed) // SECTOR_SIZE
 
-        # Назначаем LBA:
-        # Секторы 0..15: System area (16 секторов)
-        # Сектор 16: PVD (1 сектор)
-        # Сектор 17: Terminator (1 сектор)
-        # Начиная с 18 сектора: каталоги, затем данные файлов
         next_lba = 18
 
         for dir_node, _ in all_dirs:
@@ -157,7 +139,6 @@ class ISORebuilder:
 
         total_volume_sectors = next_lba
 
-        # Теперь, когда все LBA известны, формируем реальные бинарные секторы каталогов
         final_dir_bytes: dict[str, bytes] = {}
         for dir_node, parent_node in all_dirs:
             my_lba = dir_lba_map[dir_node.path]
@@ -180,60 +161,53 @@ class ISORebuilder:
 
             final_dir_bytes[dir_node.path] = _pack_records_to_sectors(records)
 
-        # -------------------------------------------------------------
-        # ПРОХОД 2: Потоковая сборка и запись образа
-        # -------------------------------------------------------------
         total_uncompressed_bytes = sum(f.effective_size for f in all_files)
         written_file_bytes = 0
 
         try:
             with open(temp_path, "wb") as out_fp:
-                # 1. Секторы 0..15 (System Area)
+                # 1. System Area
                 reader._fp.seek(0)
                 sys_area = reader._fp.read(16 * SECTOR_SIZE)
                 if len(sys_area) < 16 * SECTOR_SIZE:
                     sys_area = sys_area.ljust(16 * SECTOR_SIZE, b"\x00")
                 out_fp.write(sys_area)
 
-                # 2. Сектор 16 (PVD)
+                # 2. PVD
                 pvd_buf = bytearray(SECTOR_SIZE)
-                pvd_buf[0] = 1  # Primary Volume Descriptor
+                pvd_buf[0] = 1
                 pvd_buf[1:6] = b"CD001"
-                pvd_buf[6] = 1  # Version
+                pvd_buf[6] = 1
 
                 sys_id = reader.system_id.encode("ascii", errors="replace")[:32].ljust(32, b" ")
                 vol_id = (reader.volume_id or "PSP_GAME").encode("ascii", errors="replace")[:32].ljust(32, b" ")
                 pvd_buf[8:40] = sys_id
                 pvd_buf[40:72] = vol_id
 
-                # Общий размер тома в секторах
                 pvd_buf[80:88] = _pack_both_endian_32(total_volume_sectors)
-                # Volume Set Size (1) и Sequence (1)
                 pvd_buf[120:124] = _pack_both_endian_16(1)
                 pvd_buf[124:128] = _pack_both_endian_16(1)
-                # Logical block size (2048)
                 pvd_buf[128:132] = _pack_both_endian_16(SECTOR_SIZE)
 
-                # Запись корневого каталога (Root Directory Record) в PVD
                 root_lba = dir_lba_map[""]
                 root_size = dir_sector_counts[""] * SECTOR_SIZE
                 pvd_buf[156:190] = _build_directory_record(".", root_lba, root_size, True)
-                pvd_buf[881] = 1  # File structure version
+                pvd_buf[881] = 1
 
                 out_fp.write(pvd_buf)
 
-                # 3. Сектор 17 (Volume Descriptor Set Terminator)
+                # 3. Terminator
                 term_buf = bytearray(SECTOR_SIZE)
-                term_buf[0] = 255  # Terminator
+                term_buf[0] = 255
                 term_buf[1:6] = b"CD001"
                 term_buf[6] = 1
                 out_fp.write(term_buf)
 
-                # 4. Запись секторов всех каталогов
+                # 4. Каталоги
                 for dir_node, _ in all_dirs:
                     out_fp.write(final_dir_bytes[dir_node.path])
 
-                # 5. Потоковая запись данных файлов
+                # 5. Файлы
                 for f in all_files:
                     if cancel_check and cancel_check():
                         out_fp.close()
@@ -241,32 +215,39 @@ class ISORebuilder:
                         return
 
                     f_size = f.effective_size
-                    if f.replacement_path and f.replacement_path.exists():
-                        in_stream = open(f.replacement_path, "rb")
-                    else:
-                        reader._fp.seek(f.lba * SECTOR_SIZE)
-                        in_stream = reader._fp
 
-                    rem = f_size
-                    while rem > 0:
-                        chunk = in_stream.read(min(chunk_size, rem))
-                        if not chunk:
-                            break
-                        out_fp.write(chunk)
-                        rem -= len(chunk)
-                        written_file_bytes += len(chunk)
+                    # Если подмена напрямую из байтов (например, отредактированный PARAM.SFO)
+                    if f.replacement_bytes is not None:
+                        out_fp.write(f.replacement_bytes)
+                        written_file_bytes += len(f.replacement_bytes)
                         if progress_callback:
                             progress_callback(written_file_bytes, total_uncompressed_bytes, f.path)
+                    else:
+                        if f.replacement_path and f.replacement_path.exists():
+                            in_stream = open(f.replacement_path, "rb")
+                        else:
+                            reader._fp.seek(f.lba * SECTOR_SIZE)
+                            in_stream = reader._fp
 
-                    if f.replacement_path and f.replacement_path.exists():
-                        in_stream.close()
+                        rem = f_size
+                        while rem > 0:
+                            chunk = in_stream.read(min(chunk_size, rem))
+                            if not chunk:
+                                break
+                            out_fp.write(chunk)
+                            rem -= len(chunk)
+                            written_file_bytes += len(chunk)
+                            if progress_callback:
+                                progress_callback(written_file_bytes, total_uncompressed_bytes, f.path)
+
+                        if f.replacement_path and f.replacement_path.exists():
+                            in_stream.close()
 
                     # Выравнивание до сектора 2048 байт
                     pad = (SECTOR_SIZE - (f_size % SECTOR_SIZE)) % SECTOR_SIZE
                     if pad > 0:
                         out_fp.write(b"\x00" * pad)
 
-            # Атомарное переименование
             if out_path.exists():
                 out_path.unlink()
             temp_path.rename(out_path)

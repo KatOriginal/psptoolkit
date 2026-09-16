@@ -1,11 +1,11 @@
-"""Визуальный компонент экрана PSP XMB (CrossMediaBar)."""
+"""Визуальный компонент экрана PSP XMB (CrossMediaBar) с управлением графикой."""
 
 from __future__ import annotations
 
 from pathlib import Path
 from typing import Optional
 
-from PySide6.QtCore import QPoint, QRect, Qt
+from PySide6.QtCore import QRect, Qt, Signal
 from PySide6.QtGui import QColor, QFont, QLinearGradient, QPainter, QPixmap
 from PySide6.QtWidgets import (
     QFileDialog,
@@ -26,8 +26,8 @@ class XMBDisplayFrame(QFrame):
         self.setMinimumSize(480, 272)
         self.setFrameStyle(QFrame.Shape.Box | QFrame.Shadow.Sunken)
 
-        self.pic1: Optional[QPixmap] = None  # 480x272 Background
-        self.icon0: Optional[QPixmap] = None  # 144x80 Icon
+        self.pic1: Optional[QPixmap] = None
+        self.icon0: Optional[QPixmap] = None
         self.title_text: str = ""
         self.game_id_text: str = ""
 
@@ -65,12 +65,11 @@ class XMBDisplayFrame(QFrame):
         w = self.width()
         h = self.height()
 
-        # 1. Отрисовка фона (PIC1 или стилизованный градиент волн PSP)
+        # 1. Фон
         if self.pic1 and not self.pic1.isNull():
             scaled_bg = self.pic1.scaled(
                 w, h, Qt.AspectRatioMode.KeepAspectRatioByExpanding, Qt.TransformationMode.SmoothTransformation
             )
-            # Центрируем картинку
             x_offset = (scaled_bg.width() - w) // 2
             y_offset = (scaled_bg.height() - h) // 2
             painter.drawPixmap(0, 0, scaled_bg, x_offset, y_offset, w, h)
@@ -80,14 +79,13 @@ class XMBDisplayFrame(QFrame):
             gradient.setColorAt(1.0, QColor(10, 12, 18))
             painter.fillRect(0, 0, w, h, gradient)
 
-        # Тёмная подложка для читаемости текста и иконки
         overlay = QLinearGradient(0, 0, 0, h)
         overlay.setColorAt(0.0, QColor(0, 0, 0, 50))
         overlay.setColorAt(0.7, QColor(0, 0, 0, 80))
         overlay.setColorAt(1.0, QColor(0, 0, 0, 180))
         painter.fillRect(0, 0, w, h, overlay)
 
-        # 2. Отрисовка иконки (ICON0)
+        # 2. Иконка ICON0
         icon_x = 40
         icon_y = h - 130
         icon_w = 144
@@ -97,12 +95,10 @@ class XMBDisplayFrame(QFrame):
             scaled_icon = self.icon0.scaled(
                 icon_w, icon_h, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation
             )
-            # Рамка вокруг иконки
             painter.setPen(QColor(255, 255, 255, 120))
             painter.drawRect(icon_x - 2, icon_y - 2, scaled_icon.width() + 3, scaled_icon.height() + 3)
             painter.drawPixmap(icon_x, icon_y, scaled_icon)
         else:
-            # Плейсхолдер при отсутствии иконки
             painter.setPen(QColor(255, 255, 255, 80))
             painter.setBrush(QColor(40, 40, 40, 150))
             painter.drawRect(icon_x, icon_y, icon_w, icon_h)
@@ -114,17 +110,15 @@ class XMBDisplayFrame(QFrame):
                 "НЕТ ИКОНКИ",
             )
 
-        # 3. Отрисовка названия игры и ID
+        # 3. Текст
         if self.title_text:
             text_x = icon_x + icon_w + 25
             text_y = icon_y + 25
 
-            # Тень текста
             painter.setFont(QFont("Segoe UI", 14, QFont.Weight.Bold))
             painter.setPen(QColor(0, 0, 0, 220))
             painter.drawText(text_x + 1, text_y + 1, self.title_text)
 
-            # Белый основной текст
             painter.setPen(QColor(255, 255, 255, 240))
             painter.drawText(text_x, text_y, self.title_text)
 
@@ -135,7 +129,10 @@ class XMBDisplayFrame(QFrame):
 
 
 class XMBPreviewWidget(QWidget):
-    """Виджет предварительного просмотра с кнопками быстрого экспорта графики."""
+    """Виджет предпросмотра с кнопками замены и экспорта ресурсов."""
+
+    replace_icon_requested = Signal()
+    replace_pic_requested = Signal()
 
     def __init__(self, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
@@ -148,19 +145,31 @@ class XMBPreviewWidget(QWidget):
         self.display = XMBDisplayFrame()
         layout.addWidget(self.display)
 
-        # Кнопки экспорта ресурсов
-        btn_bar = QHBoxLayout()
+        # Кнопки быстрой замены графики
+        replace_bar = QHBoxLayout()
+        self.btn_replace_icon = QPushButton("Заменить ICON0...")
+        self.btn_replace_icon.setEnabled(False)
+        self.btn_replace_icon.clicked.connect(self.replace_icon_requested.emit)
+        replace_bar.addWidget(self.btn_replace_icon)
+
+        self.btn_replace_pic = QPushButton("Заменить PIC1...")
+        self.btn_replace_pic.setEnabled(False)
+        self.btn_replace_pic.clicked.connect(self.replace_pic_requested.emit)
+        replace_bar.addWidget(self.btn_replace_pic)
+        layout.addLayout(replace_bar)
+
+        # Кнопки экспорта
+        export_bar = QHBoxLayout()
         self.btn_export_icon = QPushButton("Сохранить ICON0.PNG...")
         self.btn_export_icon.setEnabled(False)
         self.btn_export_icon.clicked.connect(self._export_icon)
-        btn_bar.addWidget(self.btn_export_icon)
+        export_bar.addWidget(self.btn_export_icon)
 
         self.btn_export_pic = QPushButton("Сохранить PIC1.PNG...")
         self.btn_export_pic.setEnabled(False)
         self.btn_export_pic.clicked.connect(self._export_pic)
-        btn_bar.addWidget(self.btn_export_pic)
-
-        layout.addLayout(btn_bar)
+        export_bar.addWidget(self.btn_export_pic)
+        layout.addLayout(export_bar)
 
     def update_data(
         self,
@@ -168,6 +177,7 @@ class XMBPreviewWidget(QWidget):
         pic1_bytes: Optional[bytes],
         title: str,
         game_id: str,
+        can_replace: bool = True,
     ) -> None:
         """Передать сырые байты картинок и метаданные."""
         self.raw_icon0 = icon0_bytes
@@ -176,6 +186,8 @@ class XMBPreviewWidget(QWidget):
         self.display.set_assets(icon0_bytes, pic1_bytes, title, game_id)
         self.btn_export_icon.setEnabled(icon0_bytes is not None)
         self.btn_export_pic.setEnabled(pic1_bytes is not None)
+        self.btn_replace_icon.setEnabled(can_replace)
+        self.btn_replace_pic.setEnabled(can_replace)
 
     def _export_icon(self) -> None:
         if not self.raw_icon0:

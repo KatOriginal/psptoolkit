@@ -1,4 +1,4 @@
-"""Главное окно приложения PSP Toolkit с поддержкой переключения тем."""
+"""Главное окно приложения UMD Studio."""
 
 from PySide6.QtGui import QAction, QActionGroup
 from PySide6.QtWidgets import (
@@ -10,31 +10,32 @@ from PySide6.QtWidgets import (
 
 from gui.cso_converter import CSOConverterWidget
 from gui.iso_editor import ISOEditorWidget
+from gui.patcher import PatcherWidget
 from gui.ps1_builder import PS1BuilderWidget
-from gui.sfo_editor import SFOEditorWidget
+from gui.sfo_editor import SFODialog
 from gui.theme import set_theme
 
 
 class MainWindow(QMainWindow):
-    """Основное окно PSP Toolkit с модульной системой вкладок."""
+    """Основное окно UMD Studio с чистой модульной системой вкладок."""
 
     def __init__(self) -> None:
         super().__init__()
-        self.setWindowTitle("PSP Toolkit v0.1.0")
-        self.resize(1120, 740)
+        self.setWindowTitle("UMD Studio v0.1")
+        self.resize(1140, 750)
 
         self._setup_ui()
 
     def _setup_ui(self) -> None:
         menubar = self.menuBar()
 
-        # Меню Файл
+        # 1. Меню Файл
         menu_file = menubar.addMenu("&Файл")
         action_exit = menu_file.addAction("Выход")
         action_exit.setShortcut("Ctrl+Q")
         action_exit.triggered.connect(self.close)
 
-        # Меню Вид (Переключение тем)
+        # 2. Меню Вид (Переключение тем оформления)
         menu_view = menubar.addMenu("&Вид")
         menu_theme = menu_view.addMenu("Тема оформления")
 
@@ -52,23 +53,28 @@ class MainWindow(QMainWindow):
         theme_group.addAction(action_ps1)
         menu_theme.addAction(action_ps1)
 
-        # Меню Помощь
+        # 3. Меню Инструменты (Редактор SFO вынесен сюда)
+        menu_tools = menubar.addMenu("&Инструменты")
+        action_sfo = menu_tools.addAction("Редактор PARAM.SFO...")
+        action_sfo.triggered.connect(self._open_sfo_tool)
+
+        # 4. Меню Помощь
         menu_help = menubar.addMenu("&Помощь")
         action_about = menu_help.addAction("О программе")
         action_about.triggered.connect(self._show_about)
 
-        # Система вкладок
+        # Главные рабочие вкладки (UMD Editor теперь встречает пользователя первым!)
         self.tabs = QTabWidget()
         self.setCentralWidget(self.tabs)
 
-        self.sfo_editor = SFOEditorWidget()
-        self.tabs.addTab(self.sfo_editor, "SFO Editor")
+        self.umd_editor = ISOEditorWidget()
+        self.tabs.addTab(self.umd_editor, "UMD Editor")
 
-        self.iso_editor = ISOEditorWidget()
-        self.tabs.addTab(self.iso_editor, "ISO Editor")
+        self.umd_convertor = CSOConverterWidget()
+        self.tabs.addTab(self.umd_convertor, "UMD Convertor")
 
-        self.cso_converter = CSOConverterWidget()
-        self.tabs.addTab(self.cso_converter, "CSO Converter")
+        self.umd_patcher = PatcherWidget()
+        self.tabs.addTab(self.umd_patcher, "UMD Patcher")
 
         self.ps1_builder = PS1BuilderWidget()
         self.tabs.addTab(self.ps1_builder, "PS1 Builder")
@@ -76,11 +82,16 @@ class MainWindow(QMainWindow):
         self.setStatusBar(QStatusBar())
         self.statusBar().showMessage("Готов к работе")
 
+    def _open_sfo_tool(self) -> None:
+        """Открытие редактора PARAM.SFO в отдельном диалоговом окне."""
+        dlg = SFODialog(self)
+        dlg.exec()
+
     def _show_about(self) -> None:
         QMessageBox.about(
             self,
-            "О программе PSP Toolkit",
-            "<b>PSP Toolkit v0.1.0</b><br><br>"
-            "Универсальный инструмент для работы с собственными образами и данными PlayStation Portable.<br>"
+            "О программе UMD Studio",
+            "<b>UMD Studio v0.2.0-dev</b><br><br>"
+            "Универсальный инструмент для работы с образами дисков, ресурсами и данными PlayStation Portable.<br>"
             "Разработано на Python и PySide6.",
         )

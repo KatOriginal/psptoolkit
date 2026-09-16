@@ -1,4 +1,4 @@
-"""Главная точка входа для запуска настольного приложения PSP Toolkit."""
+"""Главная точка входа для запуска приложения UMD Studio."""
 
 from pathlib import Path
 import sys
@@ -15,10 +15,10 @@ from gui.theme import set_theme  # noqa: E402
 
 def main() -> int:
     app = QApplication(sys.argv)
-    app.setApplicationName("PSP Toolkit")
-    app.setOrganizationName("PSPToolkit")
+    app.setApplicationName("UMD Studio")
+    app.setOrganizationName("UMDStudio")
 
-    # Устанавливаем тёмную тему по умолчанию
+    # По умолчанию тёмная тема
     set_theme("dark")
 
     window = MainWindow()

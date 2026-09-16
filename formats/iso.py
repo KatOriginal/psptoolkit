@@ -31,10 +31,13 @@ class ISOFile(ISOItem):
 
     is_directory: bool = False
     replacement_path: Optional[Path] = None
+    replacement_bytes: Optional[bytes] = None
 
     @property
     def effective_size(self) -> int:
         """Реальный размер файла с учётом подмены."""
+        if self.replacement_bytes is not None:
+            return len(self.replacement_bytes)
         if self.replacement_path and self.replacement_path.exists():
             return self.replacement_path.stat().st_size
         return self.size
@@ -42,7 +45,7 @@ class ISOFile(ISOItem):
     @property
     def is_modified(self) -> bool:
         """Был ли файл заменён."""
-        return self.replacement_path is not None
+        return (self.replacement_path is not None) or (self.replacement_bytes is not None)
 
 
 @dataclass
@@ -72,7 +75,6 @@ class ISOReader:
         self.close()
 
     def open(self) -> None:
-        """Открыть файл образа и разобрать файловую систему."""
         if not self.path.exists():
             raise FileNotFoundError(f"Файл образа не найден: {self.path}")
 
@@ -86,13 +88,11 @@ class ISOReader:
         self._parse_pvd()
 
     def close(self) -> None:
-        """Закрыть дескриптор файла."""
         if self._fp and not self._fp.closed:
             self._fp.close()
             self._fp = None
 
     def _parse_pvd(self) -> None:
-        """Чтение Primary Volume Descriptor (Сектор 16)."""
         assert self._fp is not None
         self._fp.seek(PVD_SECTOR * SECTOR_SIZE)
         pvd_data = self._fp.read(SECTOR_SIZE)
@@ -123,7 +123,6 @@ class ISOReader:
         self._read_directory(self.root)
 
     def _read_directory(self, dir_node: ISODirectory) -> None:
-        """Рекурсивный разбор каталога."""
         assert self._fp is not None
         self._fp.seek(dir_node.lba * SECTOR_SIZE)
         raw_dir_data = self._fp.read(dir_node.size)
@@ -185,7 +184,6 @@ class ISOReader:
                 dir_node.children.append(file_item)
 
     def find_entry(self, virtual_path: str) -> Optional[Union[ISOFile, ISODirectory]]:
-        """Поиск файла или каталога по пути (например: 'PSP_GAME/PARAM.SFO')."""
         if not self.root:
             return None
 
@@ -214,7 +212,9 @@ class ISOReader:
         return current
 
     def read_file_bytes(self, item: ISOFile, max_bytes: Optional[int] = None) -> bytes:
-        """Потоковое чтение байтов файла (с учётом возможной подмены)."""
+        if item.replacement_bytes is not None:
+            return item.replacement_bytes[:max_bytes] if max_bytes else item.replacement_bytes
+
         if item.replacement_path and item.replacement_path.exists():
             with open(item.replacement_path, "rb") as r_fp:
                 return r_fp.read(max_bytes) if max_bytes else r_fp.read()
@@ -231,9 +231,14 @@ class ISOReader:
         progress_callback: Optional[Callable[[int, int], None]] = None,
         chunk_size: int = 1024 * 1024,
     ) -> None:
-        """Потоковое извлечение файла чанками по 1 МБ."""
         dest = Path(destination_path)
         dest.parent.mkdir(parents=True, exist_ok=True)
+
+        if item.replacement_bytes is not None:
+            dest.write_bytes(item.replacement_bytes)
+            if progress_callback:
+                progress_callback(len(item.replacement_bytes), len(item.replacement_bytes))
+            return
 
         if item.replacement_path and item.replacement_path.exists():
             source_fp = open(item.replacement_path, "rb")
@@ -263,7 +268,6 @@ class ISOReader:
             source_fp.close()
 
     def get_total_uncompressed_size(self, node: Optional[Union[ISOFile, ISODirectory]] = None) -> int:
-        """Подсчёт общего размера файлов внутри папки или всего образа."""
         target = node or self.root
         if not target:
             return 0
@@ -285,7 +289,6 @@ class ISOReader:
         progress_callback: Optional[Callable[[int, int, str], None]] = None,
         chunk_size: int = 1024 * 1024,
     ) -> None:
-        """Рекурсивное потоковое извлечение каталога с отслеживанием прогресса."""
         dest = Path(dest_folder)
         dest.mkdir(parents=True, exist_ok=True)
 

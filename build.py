@@ -1,4 +1,4 @@
-"""Скрипт компиляции PSP Toolkit в автономный исполняемый файл PSPToolkit.exe."""
+"""Скрипт компиляции UMD Studio в автономный исполняемый файл UMDStudio.exe."""
 
 from pathlib import Path
 import subprocess
@@ -7,7 +7,7 @@ import sys
 
 def build_executable() -> None:
     print("=" * 60)
-    print("Запуск сборки PSP Toolkit в автономный .exe")
+    print("Запуск сборки UMD Studio в автономный .exe")
     print("=" * 60)
 
     try:
@@ -23,7 +23,7 @@ def build_executable() -> None:
 
     params = [
         str(main_script),
-        "--name=PSPToolkit",
+        "--name=UMDStudio",       # Название итогового бинарника
         "--onefile",              # Собрать в единый exe файл
         "--windowed",             # Без черного окна консоли
         "--clean",                # Очистить кэш
@@ -45,7 +45,7 @@ def build_executable() -> None:
     print(f"[*] Сборка из: {main_script}")
     PyInstaller.__main__.run(params)
 
-    exe_path = project_root / "dist" / "PSPToolkit.exe"
+    exe_path = project_root / "dist" / "UMDStudio.exe"
     if exe_path.exists():
         size_mb = exe_path.stat().st_size / (1024 * 1024)
         print("\n" + "=" * 60)
