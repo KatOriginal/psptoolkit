@@ -1,0 +1,37 @@
+# Виртуальное окружение
+.venv/
+venv/
+ENV/
+
+# Кэш Python и тестов
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Результаты сборки PyInstaller
+build/
+dist/
+*.spec
+
+# Временные файлы и дампы
+*.tmp
+*.tmp_iso
+*.bak
+
+# ОБРАЗЫ ИГР (НИ В КОЕМ СЛУЧАЕ НЕ ЗАЛИВАТЬ НА ГИТ!)
+*.iso
+*.ISO
+*.cso
+*.CSO
+*.pbp
+*.PBP
+*.bin
+*.BIN
+*.cue
+*.CUE
+*.img
+*.IMG
+
+# Настройки редакторов
+.vscode/
+.idea/
